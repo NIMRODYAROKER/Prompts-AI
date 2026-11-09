@@ -186,7 +186,7 @@
     <h2 class="section-title">מה Prompts AI יודע לעשות</h2>
     <div class="grid">
       <div class="feat"><div class="dot"></div><b>מבין מה אתה צריך</b><p>ליצור, להבין, לקבל עצה או לשפר. לכל אחד פרומפט אחר.</p></div>
-      <div class="feat"><div class="dot"></div><b>שאלות חכמות</b><p>שואל רק מה שחסר לבקשה שלך, ורוב התשובות בלחיצה.</p></div>
+      <div class="feat"><div class="dot"></div><b>שאלות שמתאימות לך</b><p>לכל סוג בקשה שאלות משלו, ורוב התשובות בלחיצה.</p></div>
       <div class="feat"><div class="dot"></div><b>מתאים ל-AI שלך</b><p>Claude, ChatGPT, Gemini או מחולל תמונות.</p></div>
       <div class="feat"><div class="dot"></div><b>בלי מילים מיותרות</b><p>מקבלים רק את הפרומפט, קצר ומדויק.</p></div>
     </div>
@@ -212,7 +212,7 @@
       <span class="tag" id="resTag"></span>
       <div class="out-head">
         <h2 class="out-title">הפרומפט שלך</h2>
-        <div class="actions"><button class="ghost" id="again">גרסה אחרת</button><button class="ghost" id="copy">העתק</button></div>
+        <div class="actions"><button class="ghost" id="again">שנה תשובות</button><button class="ghost" id="copy">העתק</button></div>
       </div>
       <div class="result" id="result"></div>
       <!-- הסבר קצר: מה עושים עם הפרומפט -->
@@ -234,84 +234,88 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const SPLIT = "@@@למה@@@";
 const root = document.documentElement;
-/* חיבור ל-AI דרך השרת של האתר (api/claude.js). המפתח שמור בשרת ולא מופיע כאן */
-async function callAI(prompt, mode){
-  let res;
-  try {
-    res = await fetch("/api/claude", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ prompt, mode }) });
-  } catch(e){ throw { code:"network" }; }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw { code: res.status === 429 ? "rate_limited" : (data.error || "error") };
-  return data.text || "";
-}
-async function getSample(){
-  const s = async (prompt, opts = {}) => {
-    const text = await callAI(prompt, "full");
-    // אפקט הקלדה: מציגים את הטקסט בהדרגה
-    if (opts.onText){
-      const steps = 40, chunk = Math.ceil(text.length / steps);
-      for (let i = chunk; i < text.length; i += chunk){ opts.onText({ text: text.slice(0, i) }); await new Promise(r => setTimeout(r, 25)); }
-    }
-    return { text };
-  };
-  s.json = async (prompt) => {
-    const text = await callAI(prompt, "quick");
-    const m = text.match(/\{[\s\S]*\}/);
-    try { return m ? JSON.parse(m[0]) : null; } catch(e){ return null; }
-  };
-  return s;
-}
 
-/* ===== סוגי בקשות: לכל סוג שאלות, צבעים ופרומפט משלו ===== */
+/* ===== סוגי בקשות ===== */
 const ICONS = {
   create:'<path d="M12 3l2.2 5.3L20 10l-5.8 1.7L12 17l-2.2-5.3L4 10l5.8-1.7z"/><path d="M19 17l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>',
   explain:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V17h5v-1.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   advice:'<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
   improve:'<path d="M4 20l10-10"/><path d="M14 4v3M18 6l-2 2M20 10h-3"/><path d="M12 8l4 4"/>'
 };
-const TYPES = {
-  create:{ label:"ליצור משהו", desc:"טקסט, אתר, תמונה, תוכנית, קוד", c:["#8b5cf6","#ec4899"],
-    tag:"פרומפט ליצירה",
-    title:"מה אתה רוצה ליצור?", hint:"תאר בכמה מילים את מה שאתה רוצה לקבל בסוף.",
-    why:"ככה ה‑AI יודע מה בדיוק התוצר הסופי.",
-    chips:["פוסט או טקסט","אתר או אפליקציה","תמונה או לוגו","תוכנית או לו\"ז","קוד","משהו אחר"],
-    placeholder:"למשל: פוסט לאינסטגרם שמשיק את האפליקציה שלי" },
-  explain:{ label:"להבין משהו", desc:"הסבר פשוט על נושא או מושג", c:["#06b6d4","#3b82f6"],
-    tag:"פרומפט להסבר",
-    title:"מה אתה רוצה להבין?", hint:"נושא, מושג, או שאלה שמסקרנת אותך.",
-    why:"ככה ה‑AI יודע על מה להתמקד בהסבר.",
-    chips:[], placeholder:"למשל: איך עובדת בינה מלאכותית" },
-  advice:{ label:"לקבל עצה", desc:"עזרה בהחלטה או בבחירה", c:["#f59e0b","#ef4444"],
-    tag:"פרומפט לעצה",
-    title:"על מה אתה צריך עצה?", hint:"תאר את ההתלבטות או את המצב.",
-    why:"ככה ה‑AI מבין את ההחלטה שעומדת מולך.",
-    chips:[], placeholder:"למשל: איזה מחשב נייד לקנות ללימודים" },
-  improve:{ label:"לשפר משהו שיש לי", desc:"טקסט, קוד או רעיון קיים", c:["#10b981","#14b8a6"],
-    tag:"פרומפט לשיפור",
-    title:"מה אתה רוצה לשפר?", hint:"הדבק כאן את מה שיש לך, וכתוב בשורה אחת מה לא טוב בו.",
-    why:"ה‑AI צריך לראות את המקור כדי לשפר אותו.",
-    chips:[], placeholder:"הדבק כאן את הטקסט או הקוד" }
-};
-/* צבעים לשאלות המותאמות, כל שאלה בגוון אחר */
-const DYN_COLORS = [["#ec4899","#f97316"],["#6366f1","#22d3ee"],["#84cc16","#10b981"],["#a855f7","#f43f5e"]];
-const HOME_COLORS = ["#8b5cf6","#06b6d4"];
+/* אפשרות לבחירה: עברית לתצוגה, אנגלית לפרומפט באנגלית */
+const o = (he, en) => ({ he, en });
 
+const TYPES = {
+  create:{ label:"ליצור משהו", desc:"טקסט, אתר, תמונה, תוכנית, קוד", c:["#8b5cf6","#ec4899"], tag:"פרומפט ליצירה",
+    title:"מה אתה רוצה ליצור?", hint:"בחר סוג, ותאר בכמה מילים מה אתה רוצה לקבל בסוף.", why:"ככה ה-AI יודע מה בדיוק התוצר הסופי.",
+    chips:[o("פוסט או טקסט","a post or text"),o("אתר או אפליקציה","a website or app"),o("תמונה או לוגו","an image or logo"),o("תוכנית או לו\"ז","a plan or schedule"),o("קוד","code"),o("משהו אחר","something else")],
+    placeholder:"למשל: פוסט לאינסטגרם שמשיק את האפליקציה שלי",
+    whyWorks:["יש ל-AI תפקיד מקצועי, אז הוא עונה כמו מומחה.","כל הפרטים שלך מסודרים בנקודות, אז שום דבר לא הולך לאיבוד.","ביקשנו רק את התוצר המוגמר, בלי חפירות מסביב."] },
+  explain:{ label:"להבין משהו", desc:"הסבר פשוט על נושא או מושג", c:["#06b6d4","#3b82f6"], tag:"פרומפט להסבר",
+    title:"מה אתה רוצה להבין?", hint:"נושא, מושג, או שאלה שמסקרנת אותך.", why:"ככה ה-AI יודע על מה להתמקד בהסבר.",
+    chips:[], placeholder:"למשל: איך עובדת בינה מלאכותית",
+    whyWorks:["ה-AI יודע מה הרמה שלך, אז ההסבר לא יהיה קל מדי או קשה מדי.","ביקשנו מבנה קבוע: תשובה קצרה, הסבר, דוגמה וסיכום.","ביקשנו להסביר כל מילה מקצועית במילים פשוטות."] },
+  advice:{ label:"לקבל עצה", desc:"עזרה בהחלטה או בבחירה", c:["#f59e0b","#ef4444"], tag:"פרומפט לעצה",
+    title:"על מה אתה צריך עצה?", hint:"תאר את ההתלבטות במשפט אחד.", why:"ככה ה-AI מבין איזו החלטה עומדת מולך.",
+    chips:[], placeholder:"למשל: איזה מחשב נייד לקנות ללימודים",
+    whyWorks:["ה-AI יודע מה הכי חשוב לך ומה המגבלות שלך.","ביקשנו כמה אפשרויות עם יתרונות וחסרונות, ולא רק תשובה אחת.","ביקשנו המלצה ברורה בסוף, אז לא תישאר מבולבל."] },
+  improve:{ label:"לשפר משהו שיש לי", desc:"טקסט, קוד או רעיון קיים", c:["#10b981","#14b8a6"], tag:"פרומפט לשיפור",
+    title:"הדבק את מה שאתה רוצה לשפר", hint:"טקסט, קוד, רעיון או כל דבר אחר.", why:"ה-AI צריך לראות את המקור כדי לשפר אותו.",
+    chips:[], placeholder:"הדבק כאן את הטקסט או הקוד",
+    whyWorks:["ה-AI יודע בדיוק מה הבעיה, אז הוא מתקן את מה שצריך.","אמרנו לו מה חייב להישאר, אז הוא לא יהרוס את מה שטוב.","ביקשנו רשימה של השינויים, אז תבין מה השתפר."] }
+};
+
+/* ===== השאלות הקבועות לכל סוג ===== */
+const QUESTIONS = {
+  create:[
+    { key:"audience", title:"למי זה מיועד?", why:"כל קהל צריך סגנון אחר.", options:[o("אני בעצמי","myself"),o("חברים","my friends"),o("לקוחות","customers"),o("עוקבים ברשתות","social media followers")] },
+    { key:"goal", title:"מה המטרה של זה?", why:"ככה ה-AI יודע מה נחשב הצלחה.", options:[o("לפרסם או למכור","to promote or sell"),o("להסביר משהו","to explain something"),o("לארגן ולתכנן","to organize and plan"),o("להצחיק ולבדר","to entertain")] },
+    { key:"style", title:"באיזה סגנון?", why:"הסגנון קובע איך התוצאה תרגיש.", options:[o("מקצועי","professional"),o("צעיר וקליל","young and casual"),o("מצחיק","funny"),o("נקי ומינימליסטי","clean and minimal")] },
+    { key:"size", title:"כמה גדול או ארוך?", why:"בלי זה ה-AI מנחש, ולפעמים יוצא ארוך מדי.", options:[o("קצר","short"),o("בינוני","medium"),o("מפורט","detailed")] },
+    { key:"must", title:"יש משהו שחייב להופיע, או שאסור שיופיע?", why:"פרטים כמו שם, צבעים או מילים חשובות.", options:[], placeholder:"למשל: השם Poker House, בלי אימוג'ים" }
+  ],
+  image:[
+    { key:"istyle", title:"באיזה סגנון התמונה?", why:"זה הדבר שהכי משפיע על התוצאה.", options:[o("צילום אמיתי","photorealistic photo"),o("איור","illustration"),o("תלת-ממד","3D render"),o("אנימה","anime style"),o("מינימליסטי","minimalist flat design")] },
+    { key:"mood", title:"איזו אווירה וצבעים?", why:"ככה התמונה תרגיש כמו שדמיינת.", options:[o("בהיר ושמח","bright and cheerful colors"),o("כהה ודרמטי","dark and dramatic lighting"),o("רגוע ורך","soft and calm pastel tones"),o("צבעוני ועז","vibrant bold colors")] },
+    { key:"ratio", title:"באיזו צורה?", why:"תלוי איפה התמונה תופיע.", options:[o("ריבוע","1:1"),o("לאורך (סטורי)","9:16"),o("לרוחב","16:9")] },
+    { key:"idetails", title:"עוד פרטים שחשוב שיהיו בתמונה?", why:"כל פרט קטן עוזר.", options:[], placeholder:"למשל: על רקע ים בשקיעה" }
+  ],
+  explain:[
+    { key:"level", title:"כמה אתה כבר יודע על זה?", why:"ככה ההסבר יהיה בדיוק ברמה שלך.", options:[o("בכלל לא","nothing at all"),o("קצת","a little"),o("די הרבה","quite a lot")] },
+    { key:"reason", title:"בשביל מה אתה צריך את ההסבר?", why:"מבחן צריך הסבר אחר מסקרנות.", options:[o("סתם סקרנות","just curiosity"),o("לימודים או מבחן","studies or an exam"),o("עבודה","work"),o("להסביר למישהו אחר","to explain it to someone else")] },
+    { key:"depth", title:"כמה לעומק?", why:"כדי שלא תקבל יותר מדי או מעט מדי.", options:[o("בקצרה","briefly"),o("ברמה בינונית","at a medium depth"),o("לעומק","in depth")] },
+    { key:"learn", title:"איך הכי נוח לך להבין דברים?", why:"כל אחד לומד אחרת.", options:[o("דוגמאות מהחיים","real-life examples"),o("שלב אחרי שלב","step by step"),o("השוואות","comparisons"),o("טבלה או רשימה","a table or list")] }
+  ],
+  advice:[
+    { key:"situation", title:"מה המצב שלך כרגע?", why:"עצה טובה מתאימה למצב שלך, לא לכולם.", options:[], placeholder:"למשל: סטודנט, משתמש במחשב בעיקר ללימודים ונטפליקס" },
+    { key:"priority", title:"מה הכי חשוב לך?", why:"ככה ה-AI יודע לפי מה להמליץ.", options:[o("מחיר","price"),o("איכות","quality"),o("לחסוך זמן","saving time"),o("נוחות","convenience")] },
+    { key:"limits", title:"יש מגבלות?", why:"למשל תקציב, זמן או מקום.", options:[], placeholder:"למשל: עד 3,000 ש\"ח" },
+    { key:"options", title:"יש אפשרויות שאתה כבר שוקל?", why:"ככה ה-AI ישווה גם אותן.", options:[], placeholder:"למשל: MacBook Air או Lenovo" }
+  ],
+  improve:[
+    { key:"problem", title:"מה הבעיה העיקרית בזה?", why:"ככה ה-AI יודע מה לתקן.", options:[o("לא ברור","it is unclear"),o("ארוך מדי","it is too long"),o("משעמם","it is boring"),o("יש טעויות","it has mistakes"),o("לא מספיק מקצועי","it is not professional enough")] },
+    { key:"for", title:"למי זה מיועד?", why:"השיפור תלוי במי שיקרא את זה.", options:[o("חברים","friends"),o("לקוחות","customers"),o("מורה או מרצה","a teacher"),o("מעסיק","an employer")] },
+    { key:"keep", title:"מה חייב להישאר כמו שהוא?", why:"כדי שה-AI לא ישנה דברים שאתה אוהב.", options:[], placeholder:"למשל: את הפתיחה ואת השם" },
+    { key:"tone", title:"איזה טון אתה רוצה?", why:"הטון קובע איך זה יישמע.", options:[o("רציני","serious"),o("ידידותי","friendly"),o("מצחיק","funny"),o("משכנע","persuasive")] }
+  ]
+};
+const DYN_COLORS = [["#ec4899","#f97316"],["#6366f1","#22d3ee"],["#84cc16","#10b981"],["#a855f7","#f43f5e"],["#f59e0b","#06b6d4"]];
+const HOME_COLORS = ["#8b5cf6","#06b6d4"];
+const IMG = "מחולל תמונות (כמו Midjourney)";
 function theme([a,b]){ root.style.setProperty("--c1",a); root.style.setProperty("--c2",b); }
 
 /* ===== מצב השאלון ===== */
-let steps = [], idx = 0, A = {}, dynamicLoaded = false, busy = false;
+let steps = [], idx = 0, A = {};
 function resetState(){
-  A = { type:null, sub:"", task:"", target:"Claude", lang:"עברית" };
-  steps = baseSteps(); idx = 0; dynamicLoaded = false;
+  A = { type:null, sub:null, task:"", target:"Claude", lang:"עברית", en:{} };
+  steps = buildSteps(); idx = 0;
 }
-function baseSteps(){
-  return [
-    { key:"type", kind:"type", colors:["#8b5cf6","#06b6d4"] },
-    { key:"task", kind:"task" },
-    { key:"setup", kind:"setup", colors:["#f59e0b","#ec4899"] }
-  ];
+function buildSteps(){
+  const base = [ { key:"type", kind:"type", colors:["#8b5cf6","#06b6d4"] }, { key:"task", kind:"task" }, { key:"setup", kind:"setup", colors:["#f59e0b","#ec4899"] } ];
+  if (!A.type) return base;
+  const qs = A.target === IMG ? QUESTIONS.image : QUESTIONS[A.type];
+  return base.concat(qs.map((q,i) => Object.assign({ kind:"q", n:i, optional:true }, q)));
 }
 function stepColors(s){
   if (s.colors) return s.colors;
@@ -322,25 +326,25 @@ function stepColors(s){
 /* ===== תצוגות ===== */
 function showView(id){
   ["home","wizard","resultView"].forEach(v => $(v).classList.toggle("hidden", v !== id));
-  const el = $(id); el.classList.remove("in"); void el.offsetWidth; el.classList.add("in");
+  const v = $(id); v.classList.remove("in"); void v.offsetWidth; v.classList.add("in");
   window.scrollTo({top:0, behavior:"smooth"});
 }
-function err(m, id="err"){ const e=$(id); e.textContent=m; e.classList.remove("hidden"); }
+function err(m){ const e=$("err"); e.textContent=m; e.classList.remove("hidden"); }
 function clearErr(){ $("err").classList.add("hidden"); $("err2").classList.add("hidden"); }
-
 function el(tag, cls, text){ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e; }
 
 function chipRow(options, current, onPick){
   const row = el("div","chips stagger");
-  options.forEach((o,i) => {
-    const val = o.value || o, b = el("button","chip", o.label || o);
+  options.forEach((op,i) => {
+    const label = op.he || op.label || op, val = op.value || op.he || op;
+    const b = el("button","chip", label);
     b.type = "button"; b.style.animationDelay = (i*45)+"ms";
     b.setAttribute("aria-pressed", String(val === current));
     b.addEventListener("click", () => {
       const was = b.getAttribute("aria-pressed") === "true";
       row.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed","false"));
       if (!was) b.setAttribute("aria-pressed","true");
-      onPick(was ? "" : val);
+      onPick(was ? null : op);
     });
     row.appendChild(b);
   });
@@ -348,33 +352,25 @@ function chipRow(options, current, onPick){
 }
 
 function progress(){
-  const total = dynamicLoaded ? steps.length : steps.length + 3;
+  const total = A.type ? steps.length : 8;
   $("bar").style.width = Math.max(4, Math.round(idx / total * 100)) + "%";
-  $("stepNum").textContent = dynamicLoaded ? `שאלה ${idx+1} מתוך ${steps.length}` : `שאלה ${idx+1}`;
+  $("stepNum").textContent = A.type ? `שאלה ${idx+1} מתוך ${steps.length}` : "שאלה 1";
 }
 
-/* מעבר מונפש בין שאלות */
 function transition(dir, build){
-  const stage = $("stage");
-  const old = stage.firstElementChild;
-  const swap = () => {
-    stage.innerHTML = "";
-    const pane = el("div", "in" + (dir < 0 ? " back" : ""));
-    build(pane); stage.appendChild(pane);
-  };
+  const stage = $("stage"), old = stage.firstElementChild;
+  const swap = () => { stage.innerHTML = ""; const pane = el("div", "in" + (dir < 0 ? " back" : "")); build(pane); stage.appendChild(pane); };
   if (old){ old.className = "out" + (dir < 0 ? " back" : ""); setTimeout(swap, 260); } else swap();
 }
 
 function renderStep(dir = 1){
   clearErr();
   const s = steps[idx];
-  theme(stepColors(s));
-  progress();
-  $("nav").classList.remove("hidden");
+  theme(stepColors(s)); progress();
   $("backBtn").style.visibility = idx === 0 ? "hidden" : "visible";
   $("skipBtn").classList.toggle("hidden", !s.optional);
   $("nextBtn").classList.toggle("hidden", s.kind === "type");
-  $("nextBtn").textContent = (dynamicLoaded && idx === steps.length - 1) ? "צור את הפרומפט" : "הבא";
+  $("nextBtn").textContent = idx === steps.length - 1 ? "צור את הפרומפט" : "הבא";
 
   transition(dir, pane => {
     pane.appendChild(el("div","ghostnum", String(idx+1).padStart(2,"0")));
@@ -390,11 +386,10 @@ function renderStep(dir = 1){
         b.addEventListener("mouseenter", () => theme(t.c));
         b.addEventListener("mouseleave", () => theme(A.type ? TYPES[A.type].c : s.colors));
         b.addEventListener("click", () => {
-          if (A.type !== k){ A.type = k; A.sub = ""; A.task = ""; if (dynamicLoaded){ steps = baseSteps(); dynamicLoaded = false; } }
+          if (A.type !== k){ A.type = k; A.sub = null; A.task = ""; if (k !== "create" && A.target === IMG) A.target = "Claude"; }
+          steps = buildSteps();
           grid.querySelectorAll(".tcard").forEach(c => c.setAttribute("aria-pressed","false"));
-          b.setAttribute("aria-pressed","true"); theme(t.c);
-          if (A.type !== "create" && A.target.includes("תמונות")) A.target = "Claude";
-          burst(b, t.c, 26);
+          b.setAttribute("aria-pressed","true"); theme(t.c); burst(b, t.c, 26);
           setTimeout(() => { idx++; renderStep(1); }, 380);
         });
         grid.appendChild(b);
@@ -405,8 +400,13 @@ function renderStep(dir = 1){
     else if (s.kind === "task"){
       const t = TYPES[A.type];
       pane.append(el("span","tag",t.tag), el("h2","q-title",t.title), el("p","q-hint",t.hint), el("span","why","למה שואלים? " + t.why));
-      if (t.chips.length) pane.appendChild(chipRow(t.chips, A.sub, v => A.sub = v));
-      const f = el("textarea", "big"); f.id = "field"; f.placeholder = t.placeholder; f.value = A.task;
+      if (t.chips.length) pane.appendChild(chipRow(t.chips, A.sub && A.sub.he, op => {
+        A.sub = op;
+        // תמונה: מציעים אוטומטית מחולל תמונות ואנגלית
+        if (op && op.he === "תמונה או לוגו"){ A.target = IMG; A.lang = "אנגלית"; }
+        steps = buildSteps();
+      }));
+      const f = el("textarea","big"); f.id = "field"; f.placeholder = t.placeholder; f.value = A.task;
       pane.appendChild(f);
       setTimeout(() => f.focus({preventScroll:true}), 350);
     }
@@ -414,17 +414,19 @@ function renderStep(dir = 1){
     else if (s.kind === "setup"){
       pane.append(el("h2","q-title","לאיזה AI הפרומפט הולך?"), el("p","q-hint","כל AI מבין פרומפטים קצת אחרת, אז נתאים את הכתיבה."));
       const ais = ["Claude","ChatGPT","Gemini"];
-      if (A.type === "create") ais.push({label:"מחולל תמונות", value:"מחולל תמונות (כמו Midjourney)"});
-      pane.appendChild(chipRow(ais, A.target, v => A.target = v || "Claude"));
-      pane.append(el("div","sublabel","באיזו שפה לכתוב את הפרומפט?"), chipRow(["עברית","אנגלית"], A.lang, v => A.lang = v || "עברית"));
+      if (A.type === "create") ais.push({ label:"מחולל תמונות", value:IMG });
+      pane.appendChild(chipRow(ais, A.target, op => { A.target = op ? (op.value || op) : "Claude"; steps = buildSteps(); progress(); }));
+      pane.append(el("div","sublabel","באיזו שפה לכתוב את הפרומפט?"), chipRow(["עברית","אנגלית"], A.lang, op => A.lang = op || "עברית"));
+      if (A.target === IMG || A.type === "create") pane.appendChild(el("span","why","טיפ: מחוללי תמונות מבינים הכי טוב אנגלית."));
     }
 
-    else { // שאלה מותאמת
-      pane.append(el("span","tag","שאלה מותאמת לבקשה שלך"), el("h2","q-title",s.title));
-      if (s.why) pane.appendChild(el("p","q-hint",s.why));
+    else { // שאלה קבועה לפי הסוג
+      pane.append(el("span","tag",TYPES[A.type].tag), el("h2","q-title",s.title), el("p","q-hint",s.why));
       const f = el("textarea"); f.id = "field"; f.rows = 2; f.value = A[s.key] || "";
-      f.placeholder = s.options && s.options.length ? "בחר למעלה או כתוב תשובה משלך" : "התשובה שלך";
-      if (s.options && s.options.length) pane.appendChild(chipRow(s.options, A[s.key], v => { f.value = v; }));
+      f.placeholder = s.placeholder || (s.options.length ? "בחר למעלה או כתוב תשובה משלך" : "התשובה שלך");
+      if (s.options.length) pane.appendChild(chipRow(s.options, A[s.key], op => {
+        f.value = op ? op.he : ""; A.en[s.key] = op ? op.en : null;
+      }));
       f.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); next(); } });
       pane.appendChild(f);
       setTimeout(() => f.focus({preventScroll:true}), 350);
@@ -436,137 +438,106 @@ function saveCurrent(){
   const s = steps[idx], f = $("field");
   if (f) A[s.key] = f.value.trim();
 }
-
-async function next(){
-  if (busy) return;
+function next(){
   const s = steps[idx];
-  const before = A.task;
   saveCurrent();
-  if (s.kind === "task"){
-    if (!A.task && !A.sub){ err("כתוב בכמה מילים מה אתה רוצה."); return; }
-    if (dynamicLoaded && before !== A.task){ steps = baseSteps(); dynamicLoaded = false; }
-  }
-  if (!dynamicLoaded && s.kind === "setup"){ await loadDynamic(); return; }
+  if (s.kind === "task" && !A.task){ err(A.type === "improve" ? "הדבק כאן את מה שאתה רוצה לשפר." : "כתוב בכמה מילים מה אתה רוצה."); return; }
   if (idx < steps.length - 1){ idx++; renderStep(1); }
   else generate();
 }
 
-function loadingPane(text){
-  $("nav").classList.add("hidden");
-  transition(1, pane => { pane.innerHTML = `<div class="loading"><div class="orbit"><span></span><span></span><span></span></div><p></p></div>`; pane.querySelector("p").textContent = text; });
-}
-
-/* ===== שאלות מותאמות לפי סוג הבקשה ===== */
-const FOCUS = {
-  create:"מטרה ושימוש, קהל יעד, סגנון וטון, גודל או אורך, דברים שחייבים להופיע, ופורמט התוצר הסופי.",
-  explain:"כמה המשתמש כבר יודע על הנושא, למה הוא צריך את ההסבר (סקרנות, מבחן, עבודה), כמה לעומק, ואיך הוא אוהב ללמוד (דוגמאות, שלבים, השוואות).",
-  advice:"המצב הנוכחי של המשתמש, אילוצים (תקציב, זמן, מקום), מה הכי חשוב לו, ואילו אפשרויות הוא כבר שוקל.",
-  improve:"מה בדיוק לא טוב כרגע, למי זה מיועד, מה חייב להישאר, ואיך תיראה גרסה מוצלחת בעיניו."
+/* ===== בניית הפרומפט מהתשובות ===== */
+const ROLES = {
+  "פוסט או טקסט":["קופירייטר מנוסה ומומחה לרשתות חברתיות","an experienced copywriter and social media expert","הטקסט","the text"],
+  "אתר או אפליקציה":["מפתח ומעצב אתרים בכיר, מומחה ב-UX/UI","a senior web developer and UI/UX designer","הקוד המלא בקובץ אחד שמוכן להרצה","the complete code in a single ready-to-run file"],
+  "תמונה או לוגו":["מעצב גרפי מקצועי","a professional graphic designer","קונספט עיצובי מפורט, ואם אפשר גם קובץ SVG","a detailed design concept, and an SVG file if possible"],
+  "תוכנית או לו\"ז":["מתכנן מומחה ומסודר","an expert planner","התוכנית המלאה בטבלה או ברשימה מסודרת","the full plan as a clear table or list"],
+  "קוד":["מתכנת בכיר","a senior software developer","הקוד המלא עם הערות קצרות","the complete code with short comments"],
 };
-async function loadDynamic(){
-  const s = await getSample();
-  if (!s){ err("האתר עובד רק כשפותחים אותו דרך Claude. נסה לרענן את העמוד."); return; }
-  busy = true;
-  loadingPane("מכין שאלות שמתאימות בדיוק לבקשה שלך");
-  const isImage = A.target.includes("תמונות");
-  const prompt =
-`אתה מומחה לכתיבת פרומפטים. משתמש מתחיל רוצה פרומפט ל-${A.target}.
-סוג הבקשה: ${TYPES[A.type].label}${A.sub ? " (" + A.sub + ")" : ""}
-הבקשה: "${A.task}"
-
-נסח את השאלות החשובות ביותר שחסרות כדי לכתוב פרומפט מושלם לבקשה הזאת.
-${isImage ? "התמקד בנושא התמונה, סגנון, צבעים, אווירה ויחס גובה-רוחב." : "התמקד ב: " + FOCUS[A.type]}
-כללים:
-- 3 עד 4 שאלות. אל תשאל על משהו שכבר ברור מהבקשה.
-- כל שאלה קצרה, פשוטה וברורה למתחיל, בעברית, מותאמת לבקשה הספציפית (לא שאלה כללית).
-- לכל שאלה: הסבר של עד 8 מילים למה זה עוזר, ו-3 או 4 תשובות קצרות לבחירה מהירה (עד 4 מילים כל אחת).
-החזר JSON בלבד: {"questions":[{"q":"שאלה","why":"למה זה עוזר","options":["א","ב","ג"]}]}`;
-  let qs = [];
-  try {
-    const data = await s.json(prompt, { modelTier:"quick" });
-    qs = (data && Array.isArray(data.questions)) ? data.questions.filter(x => x && x.q).slice(0,4) : [];
-  } catch(e){
-    busy = false;
-    if (e && (e.code === "rate_limited" || e.code === "not_granted")){
-      renderStep(-1);
-      setTimeout(() => err(e.code === "rate_limited" ? "יותר מדי בקשות ברגע. חכה דקה ונסה שוב." : "צריך לאשר לעמוד להשתמש ב-Claude. רענן ונסה שוב."), 300);
-      return;
-    }
+// התשובה בשפה הנכונה: בפרומפט באנגלית לוקחים את הגרסה האנגלית של האפשרות שנבחרה
+function ans(key, en){
+  const v = A[key]; if (!v) return "";
+  if (en && A.en[key]){
+    const q = steps.find(s => s.key === key);
+    const op = q && q.options && q.options.find(x => x.he === v);
+    if (op) return op.en;
   }
-  busy = false;
-  steps = baseSteps().concat(qs.map((x,i) => ({ key:"dq"+i, kind:"dyn", n:i, optional:true, title:x.q, why:x.why || "", options:(x.options||[]).slice(0,4) })));
-  dynamicLoaded = true;
-  if (steps.length > 3){ idx++; renderStep(1); } else generate();
+  return v;
+}
+function lines(pairs){ return pairs.filter(p => p[1]).map(p => `- ${p[0]}: ${p[1]}`).join("\n"); }
+
+function buildPrompt(){
+  const en = A.lang === "אנגלית";
+  const t = A.task;
+
+  if (A.target === IMG){
+    const parts = [t, ans("istyle",true), ans("mood",true), ans("idetails",true), "highly detailed, high quality, sharp focus"].filter(Boolean);
+    const ratio = ans("ratio",true);
+    return parts.join(", ") + (ratio ? ` --ar ${ratio}` : "");
+  }
+
+  if (A.type === "create"){
+    const sub = A.sub ? A.sub.he : "";
+    const r = ROLES[sub] || ["מומחה בתחום","an expert in this field","התוצר המוגמר","the finished result"];
+    const det = en
+      ? lines([["Audience",ans("audience",1)],["Goal",ans("goal",1)],["Style and tone",ans("style",1)],["Length / size",ans("size",1)],["Must include / avoid",ans("must",1)]])
+      : lines([["קהל יעד",ans("audience")],["מטרה",ans("goal")],["סגנון וטון",ans("style")],["אורך או היקף",ans("size")],["חובה / אסור",ans("must")]]);
+    return en
+      ? `You are ${r[1]}.\n\nTask: create ${A.sub ? A.sub.en + ": " : ""}${t}\n${det ? "\nDetails:\n" + det + "\n" : ""}\nOutput: return only ${r[3]}, ready to use, with no introduction or explanations.\nIf an important detail is missing, first ask me up to 3 short numbered questions, and create it only after I answer.`
+      : `אתה ${r[0]}.\n\nהמשימה: ליצור ${sub ? sub + ": " : ""}${t}\n${det ? "\nפרטים:\n" + det + "\n" : ""}\nפורמט: החזר רק את ${r[2]}, מוכן לשימוש, בלי הקדמות ובלי הסברים.\nאם חסר לך פרט חשוב, שאל אותי קודם עד 3 שאלות קצרות ברשימה ממוספרת, וצור רק אחרי שאענה.`;
+  }
+
+  if (A.type === "explain"){
+    const depth = ans("depth",en) || (en ? "clearly" : "בצורה ברורה");
+    const how = ans("learn",en);
+    return en
+      ? `I want to understand: ${t}\n\n${lines([["What I already know",ans("level",1)],["Why I need it",ans("reason",1)]])}\n\nExplain it ${depth}, in simple language, and explain every technical term in plain words.\nStructure:\n1. A one-line short answer.\n2. A clear explanation${how ? " using " + how : ""}.\n3. A real-life example.\n4. A 3-point summary.\nIf my question is unclear, ask me before answering.`
+      : `אני רוצה להבין: ${t}\n\n${lines([["כמה אני כבר יודע",ans("level")],["בשביל מה אני צריך את זה",ans("reason")]])}\n\nתסביר לי ${depth}, בשפה פשוטה, ותסביר כל מונח מקצועי במילים פשוטות.\nמבנה התשובה:\n1. תשובה קצרה בשורה אחת.\n2. הסבר ברור${how ? " בעזרת " + how : ""}.\n3. דוגמה מהחיים.\n4. סיכום ב-3 נקודות.\nאם משהו בשאלה לא ברור לך, שאל אותי לפני שאתה עונה.`.replace("\n\n\n","\n\n");
+  }
+
+  if (A.type === "advice"){
+    const det = en
+      ? lines([["My situation",ans("situation",1)],["What matters most to me",ans("priority",1)],["Constraints",ans("limits",1)],["Options I'm considering",ans("options",1)]])
+      : lines([["המצב שלי",ans("situation")],["מה הכי חשוב לי",ans("priority")],["מגבלות",ans("limits")],["אפשרויות שאני שוקל",ans("options")]]);
+    return en
+      ? `You are an experienced, objective advisor.\n\nI need advice: ${t}\n${det ? "\n" + det + "\n" : ""}\nGive me 2-3 suitable options, with short pros and cons for each, and finish with one clear recommendation and why it fits me specifically.\nIf important information is missing, ask me up to 3 short questions first.`
+      : `אתה יועץ מנוסה ואובייקטיבי.\n\nאני צריך עצה: ${t}\n${det ? "\n" + det + "\n" : ""}\nתן לי 2-3 אפשרויות מתאימות, עם יתרונות וחסרונות קצרים לכל אחת, ובסוף המלצה ברורה אחת ולמה היא מתאימה דווקא לי.\nאם חסר לך מידע חשוב, שאל אותי קודם עד 3 שאלות קצרות.`;
+  }
+
+  // improve
+  const det = en
+    ? lines([["Main problem",ans("problem",1)],["Intended for",ans("for",1)],["Must stay the same",ans("keep",1)],["Desired tone",ans("tone",1)]])
+    : lines([["הבעיה העיקרית",ans("problem")],["מיועד ל",ans("for")],["חייב להישאר",ans("keep")],["הטון הרצוי",ans("tone")]]);
+  return en
+    ? `You are an expert editor. Improve the following:\n\n"""\n${t}\n"""\n${det ? "\n" + det + "\n" : ""}\nReturn the full improved version, followed by a short list of what you changed.`
+    : `אתה עורך מקצועי ומומחה בתחום. שפר את התוכן הבא:\n\n"""\n${t}\n"""\n${det ? "\n" + det + "\n" : ""}\nהחזר את הגרסה המשופרת המלאה, ואחריה רשימה קצרה של מה ששינית.`;
 }
 
-/* ===== יצירת הפרומפט: פורמט שונה לכל סוג ===== */
-const RULES = {
-  create:`- המטרה: שה‑AI ייצר את התוצר המוגמר עצמו, לא הסבר עליו.
-- כלול: תפקיד מקצועי מתאים, מה בדיוק ליצור, למי ולמה, סגנון וטון, דרישות ואילוצים, ופורמט מסירה מדויק (למשל: טקסט סופי מוכן לפרסום, קוד מלא בקובץ אחד, טבלה).
-- בקש מה‑AI להחזיר רק את התוצר, בלי הקדמות.`,
-  explain:`- המטרה: שה‑AI יסביר את הנושא בצורה ברורה ברמה של המשתמש.
-- כלול: רמת הידע של המשתמש, למה הוא צריך את ההסבר, והעומק הרצוי.
-- בקש מבנה: תשובה קצרה בשורה אחת, אחריה הסבר בשפה פשוטה, דוגמה או השוואה מהחיים, וסיכום של 2-3 נקודות.
-- בקש להסביר כל מונח מקצועי במילים פשוטות.`,
-  advice:`- המטרה: שה‑AI יעזור להחליט.
-- כלול: המצב של המשתמש, האילוצים שלו ומה הכי חשוב לו.
-- בקש: 2-3 אפשרויות מתאימות, יתרונות וחסרונות קצרים לכל אחת, והמלצה ברורה אחת עם נימוק שמתאים למצב שלו.`,
-  improve:`- המטרה: שה‑AI ישפר את התוכן הקיים של המשתמש.
-- העתק לתוך הפרומפט את התוכן המקורי של המשתמש במלואו, בתוך מרכאות משולשות.
-- כלול: מה לא טוב בו, למי הוא מיועד ומה חייב להישאר.
-- בקש: את הגרסה המשופרת המלאה, ואחריה רשימה קצרה של מה שונה.`
-};
+/* ===== תוצאה ===== */
 async function generate(){
-  const s = await getSample(); if (!s) return;
   theme(TYPES[A.type].c);
   showView("resultView");
-  $("resTag").textContent = TYPES[A.type].tag;
+  $("resTag").textContent = A.target === IMG ? "פרומפט לתמונה" : TYPES[A.type].tag;
   $("whyBox").classList.add("hidden"); $("howto").classList.add("hidden"); clearErr();
   const r = $("result"); r.textContent = ""; r.classList.add("typing");
-  const isImage = A.target.includes("תמונות");
-  const details = steps.filter(x => x.kind === "dyn" && A[x.key]).map(x => `- ${x.title} ${A[x.key]}`).join("\n") || "אין";
-
-  const instructions =
-`אתה מומחה לכתיבת פרומפטים. כתוב את הפרומפט הכי מדויק ויעיל שאפשר, שהמשתמש ידביק ב-${A.target}.
-
-סוג הבקשה: ${TYPES[A.type].label}${A.sub ? " (" + A.sub + ")" : ""}
-הבקשה: """${A.task}"""
-פרטים מהשאלון:
-${details}
-
-כללים:
-- כתוב את הפרומפט ב${A.lang}.
-- רק מה שנחוץ: בלי פתיחה, בלי נימוסים, בלי חזרות ובלי שורות מיותרות.
-${isImage ? "- זה פרומפט למחולל תמונות: פסקה תיאורית אחת חדה (נושא, סגנון, תאורה, צבעים, קומפוזיציה, אווירה, יחס גובה-רוחב). בלי הוראות למודל שפה." : RULES[A.type] + `
-- אם עדיין חסר פרט קריטי, הוסף בסוף הוראה ל-AI לשאול קודם עד 3 שאלות קצרות ברשימה ממוספרת, ורק אחרי התשובות לענות. אל תשאיר סוגריים למילוי.`}
-- שמור על הכוונה המקורית. בלי אימוג'ים.
-
-פורמט התשובה שלך, בדיוק כך:
-הפרומפט בלבד.
-שורה שבה כתוב רק: ${SPLIT}
-2 עד 3 שורות קצרות בעברית פשוטה, כל אחת מתחילה ב"- ", שמסבירות למתחיל למה הפרומפט עובד טוב.`;
-
-  $("again").disabled = true;
-  try {
-    const res = await s(instructions, { cache:false, onText: ({text}) => { if (text && text !== "Thinking...") render(text); } });
-    render(res.text || "");
-    r.classList.remove("typing");
-    showHowto();
-    const b = r.getBoundingClientRect();
-    burst({getBoundingClientRect:() => b}, TYPES[A.type].c, 70);
-  } catch(e){
-    r.classList.remove("typing"); r.textContent = "";
-    if (e && e.code === "rate_limited") err("יותר מדי בקשות ברגע. חכה דקה ונסה שוב.", "err2");
-    else if (e && e.code === "not_granted") err("צריך לאשר לעמוד להשתמש ב-Claude. רענן ונסה שוב.", "err2");
-    else err("משהו השתבש. לחץ על \"גרסה אחרת\" כדי לנסות שוב.", "err2");
-  } finally { $("again").disabled = false; }
+  const text = buildPrompt();
+  // אפקט הקלדה
+  const n = 45, chunk = Math.max(1, Math.ceil(text.length / n));
+  for (let i = chunk; i < text.length; i += chunk){ r.textContent = text.slice(0, i); await new Promise(res => setTimeout(res, 22)); }
+  r.textContent = text; r.classList.remove("typing");
+  $("changes").innerHTML = "";
+  TYPES[A.type].whyWorks.forEach(w => $("changes").appendChild(el("li",null,w)));
+  $("whyBox").classList.remove("hidden");
+  showHowto();
+  const b = r.getBoundingClientRect();
+  burst({ getBoundingClientRect:() => b }, TYPES[A.type].c, 70);
 }
-/* הסבר קצר לפי ה-AI שנבחר בשאלון */
+
 const AI_LINKS = {
   "Claude":["Claude","https://claude.ai/new"],
   "ChatGPT":["ChatGPT","https://chatgpt.com/"],
   "Gemini":["Gemini","https://gemini.google.com/app"],
-  "מחולל תמונות (כמו Midjourney)":["מחולל התמונות שלך (למשל Midjourney)","https://www.midjourney.com/imagine"]
+  [IMG]:["מחולל התמונות שלך (למשל Midjourney)","https://www.midjourney.com/imagine"]
 };
 function showHowto(){
   const [name, url] = AI_LINKS[A.target] || AI_LINKS["Claude"];
@@ -574,16 +545,6 @@ function showHowto(){
   $("aiLink").textContent = "פתח את " + name.split(" (")[0];
   $("aiLink").href = url;
   $("howto").classList.remove("hidden");
-}
-function render(full){
-  const parts = full.split(SPLIT);
-  $("result").textContent = parts[0].trim();
-  if (parts[1] !== undefined){
-    const items = parts[1].split("\n").map(t => t.replace(/^[\s\-\*•\d\.]+/, "").trim()).filter(Boolean);
-    $("changes").innerHTML = "";
-    items.forEach(t => $("changes").appendChild(el("li",null,t)));
-    $("whyBox").classList.toggle("hidden", !items.length);
-  }
 }
 
 /* ===== אפקטים: פיצוץ חלקיקים וגל בלחיצה ===== */
@@ -619,14 +580,14 @@ document.addEventListener("click", e => {
 });
 
 /* ===== חיבור כפתורים ===== */
-function startWizard(){ resetState(); showView("wizard"); $("stage").innerHTML = ""; renderStep(1); getSample(); }
+function startWizard(){ resetState(); showView("wizard"); $("stage").innerHTML = ""; renderStep(1); }
 $("startBtn").addEventListener("click", startWizard);
 $("restart").addEventListener("click", startWizard);
 $("nextBtn").addEventListener("click", next);
-$("skipBtn").addEventListener("click", () => { const f=$("field"); if (f) f.value=""; next(); });
-$("backBtn").addEventListener("click", () => { if (busy) return; saveCurrent(); if (idx > 0){ idx--; renderStep(-1); } });
+$("skipBtn").addEventListener("click", () => { const f=$("field"); if (f) f.value=""; A.en[steps[idx].key] = null; next(); });
+$("backBtn").addEventListener("click", () => { saveCurrent(); if (idx > 0){ idx--; renderStep(-1); } });
 $("exitBtn").addEventListener("click", () => { theme(HOME_COLORS); showView("home"); });
-$("again").addEventListener("click", generate);
+$("again").addEventListener("click", () => { showView("wizard"); $("stage").innerHTML = ""; idx = 1; renderStep(-1); });
 $("copy").addEventListener("click", async () => {
   const t = $("result").textContent;
   try { await navigator.clipboard.writeText(t); }
@@ -635,6 +596,7 @@ $("copy").addEventListener("click", async () => {
   burst(c, TYPES[A.type||"create"].c, 18);
   setTimeout(() => { c.textContent = "העתק"; c.classList.remove("done"); }, 1800);
 });
+
 </script>
 </body>
 </html>
