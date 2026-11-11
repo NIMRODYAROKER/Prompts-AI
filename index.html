@@ -132,6 +132,23 @@
   .tcard b{display:block;font-size:15px;line-height:1.3}
   .tcard span{display:block;color:var(--muted);font-size:12.5px;line-height:1.35;margin-top:1px}
   .tcards.wide{grid-template-columns:1fr}
+  /* שאלה 1: שני כרטיסים גדולים אחד מתחת לשני */
+  .tcards.big{grid-template-columns:1fr;gap:12px}
+  .tcards.big .tcard{padding:18px 16px;min-height:104px;gap:14px;border-radius:18px;
+    background:linear-gradient(135deg,color-mix(in srgb,var(--c1) 16%,transparent),rgba(255,255,255,.03) 70%)}
+  .tcards.big .tcard:hover{border-color:color-mix(in srgb,var(--c2) 70%,transparent);box-shadow:0 14px 34px -18px var(--c2);transform:translateY(-2px)}
+  .tcards.big .tcard[aria-pressed="true"]{border-color:var(--c2);box-shadow:0 0 0 1px var(--c2) inset}
+  .tcards.big .ic{width:54px;height:54px;border-radius:16px;background:linear-gradient(135deg,var(--c1),var(--c2));box-shadow:0 10px 22px -10px var(--c1)}
+  .tcards.big svg{width:26px;height:26px;stroke:#fff}
+  .tcards.big .tx{flex:1}
+  .tcards.big b{font-size:19px;margin-bottom:2px}
+  .tcards.big span{font-size:14px}
+  .mini{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+  .mini i{font-style:normal;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;background:rgba(255,255,255,.07);color:#c9cbe0}
+  .arrow{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line);color:var(--muted);transition:transform .25s var(--ease),color .2s,border-color .2s}
+  .arrow svg{width:14px!important;height:14px!important;stroke:currentColor!important;fill:none;stroke-width:2.4}
+  .tcard:hover .arrow{transform:translateX(-4px);color:#fff;border-color:var(--c2)}
+  .stage.compact{min-height:0}
 
   /* צ'יפים ושדות */
   /* אפשרויות: רשת קומפקטית של כפתורים שווים */
@@ -276,9 +293,9 @@ const ICONS = {
 const o = (he, en, d, de) => ({ he, en, d, de });
 
 const TYPES = {
-  create:{ label:"ליצור משהו", desc:"פוסט, אתר, תמונה, תוכנית, קוד", c:["#8b5cf6","#ec4899"], tag:"פרומפט ליצירה",
+  create:{ label:"ליצור משהו", desc:"משהו חדש מאפס, בסגנון שתבחר", mini:["פוסט","אתר","תמונה","תוכנית","קוד"], c:["#8b5cf6","#ec4899"], tag:"פרומפט ליצירה",
     whyWorks:["ל-AI יש תפקיד של מומחה, אז הוא עובד ברמה מקצועית.","הסגנון מתואר במילים ברורות, אז ה-AI יודע בדיוק איך זה צריך להיראות.","ביקשנו תוצר סופי ומלא, בלי שאלות ובלי חפירות מסביב."] },
-  improve:{ label:"לשפר משהו שיש לי", desc:"טקסט, קוד או רעיון קיים", c:["#10b981","#14b8a6"], tag:"פרומפט לשיפור",
+  improve:{ label:"לשפר משהו שיש לי", desc:"משהו שכבר כתבת או בנית, שיהיה טוב יותר", mini:["טקסט","קוד","קורות חיים","רעיון"], c:["#10b981","#14b8a6"], tag:"פרומפט לשיפור",
     title:"הדבק את מה שאתה רוצה לשפר", hint:"טקסט, קוד, רעיון או כל דבר אחר.", why:"ה-AI צריך לראות את המקור כדי לשפר אותו.",
     placeholder:"הדבק כאן את הטקסט או הקוד",
     whyWorks:["ה-AI יודע בדיוק מה הבעיה, אז הוא מתקן את מה שצריך.","אמרנו לו מה חייב להישאר, אז הוא לא יהרוס את מה שטוב.","ביקשנו את הגרסה הסופית ורשימת שינויים, בלי שאלות."] }
@@ -483,13 +500,16 @@ function transition(dir, build){
 }
 
 /* כרטיסים גדולים לבחירה (משמש גם לסוג הבקשה וגם למה ליצור) */
-function cardGrid(items, current, onPick){
-  const grid = el("div","tcards stagger");
+function cardGrid(items, current, onPick, big){
+  const grid = el("div","tcards stagger" + (big ? " big" : ""));
   items.forEach((it,i) => {
     const b = el("button","tcard"); b.type="button"; b.style.animationDelay=(i*50)+"ms";
     b.setAttribute("aria-pressed", String(current === it.key));
     if (it.icon) b.innerHTML = `<div class="ic"><svg viewBox="0 0 24 24">${it.icon}</svg></div>`;
-    const tx = el("div","tx"); tx.append(el("b",null,it.label)); if (it.desc) tx.append(el("span",null,it.desc)); b.append(tx);
+    const tx = el("div","tx"); tx.append(el("b",null,it.label)); if (it.desc) tx.append(el("span",null,it.desc));
+    if (it.mini){ const m = el("div","mini"); it.mini.forEach(x => m.appendChild(el("i",null,x))); tx.appendChild(m); }
+    b.append(tx);
+    if (big){ const ar = el("div","arrow"); ar.innerHTML = '<svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>'; b.appendChild(ar); }
     b.addEventListener("click", () => {
       grid.querySelectorAll(".tcard").forEach(c => c.setAttribute("aria-pressed","false"));
       b.setAttribute("aria-pressed","true"); burst(b, HOME_COLORS, 20);
@@ -516,18 +536,20 @@ function renderStep(dir = 1){
   $("backBtn").style.visibility = idx === 0 ? "hidden" : "visible";
   $("skipBtn").classList.toggle("hidden", !s.optional);
   $("nextBtn").classList.toggle("hidden", s.kind === "type" || s.kind === "kind");
+  $("nav").classList.toggle("hidden", s.kind === "type");
+  $("stage").classList.toggle("compact", s.kind === "type" || s.kind === "kind");
   $("nextBtn").textContent = idx === steps.length - 1 ? "צור את הפרומפט" : "הבא";
 
   transition(dir, pane => {
     pane.appendChild(el("div","ghostnum", String(idx+1).padStart(2,"0")));
 
     if (s.kind === "type"){
-      pane.append(el("h2","q-title","מה אתה רוצה לעשות?"), el("p","q-hint","בחר אחד, ונמשיך משם."));
-      pane.appendChild(cardGrid(Object.entries(TYPES).map(([k,t]) => ({ key:k, label:t.label, desc:t.desc, c:t.c[0], icon:ICONS[k] })), A.type, k => {
+      pane.append(el("h2","q-title","מה אתה רוצה לעשות?"), el("p","q-hint","בחר מה מתאים לך, ונבנה יחד את הפרומפט."));
+      pane.appendChild(cardGrid(Object.entries(TYPES).map(([k,t]) => ({ key:k, label:t.label, desc:t.desc, mini:t.mini, c:t.c[0], icon:ICONS[k] })), A.type, k => {
         if (A.type !== k){ A.type = k; A.kind = null; A.task = ""; A.style = ""; if (k !== "create" && A.target === IMG) A.target = "Claude"; }
         steps = buildSteps(); theme(TYPES[k].c);
         setTimeout(() => { idx++; renderStep(1); }, 380);
-      }));
+      }, true));
     }
 
     else if (s.kind === "kind"){
