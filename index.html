@@ -85,6 +85,8 @@
   @keyframes rip{to{transform:scale(4);opacity:0}}
   .start{align-self:flex-start;min-width:230px;font-size:19px}
   .meta{color:var(--muted);font-size:14px;margin-top:12px}
+  .fresh{align-self:flex-start;margin-top:6px;padding:6px 2px;font-size:14.5px}
+  .link.fresh.warn{color:#fca5a5}
 
   .link{border:0;background:none;color:var(--muted);font:inherit;font-size:15px;font-weight:700;cursor:pointer;padding:10px 6px;transition:color .2s}
   .link:hover{color:var(--ink)}
@@ -237,7 +239,8 @@
       <h1 class="rise">עונים על כמה שאלות.<br><span class="grad">מקבלים פרומפט מושלם.</span></h1>
       <p class="sub rise">ליצור משהו חדש או לשפר משהו שיש לך. השאלון בונה פרומפט מפורט ומדויק שמוכן להדבקה.</p>
       <button class="btn glow start rise" id="startBtn">התחל</button>
-      <span class="meta rise">לוקח בערך דקה</span>
+      <button class="link fresh hidden" id="freshBtn">התחל שאלון חדש</button>
+      <span class="meta rise" id="homeMeta">לוקח בערך דקה</span>
     </div>
 
     <h2 class="section-title">מה Prompts AI יודע לעשות</h2>
@@ -560,7 +563,7 @@ function renderStep(dir = 1){
     if (s.kind === "type"){
       pane.append(el("h2","q-title","מה אתה רוצה לעשות?"), el("p","q-hint","בחר מה מתאים לך, ונבנה יחד את הפרומפט."));
       pane.appendChild(cardGrid(Object.entries(TYPES).map(([k,t]) => ({ key:k, label:t.label, desc:t.desc, mini:t.mini, c:t.c[0], icon:ICONS[k] })), A.type, k => {
-        if (A.type !== k){ A.type = k; A.kind = null; A.task = ""; A.style = ""; if (k !== "create" && A.target === IMG) A.target = "Claude"; }
+        if (A.type !== k){ A.type = k; A.kind = null; A.style = ""; if (k !== "create" && A.target === IMG) A.target = "Claude"; }
         steps = buildSteps(); theme(TYPES[k].c);
         setTimeout(() => { idx++; renderStep(1); }, 380);
       }, true));
@@ -741,6 +744,7 @@ async function generate(){
   setPct(100, "הפרומפט מוכן");
   $("copy").disabled = false; $("again").disabled = false;
   setTimeout(() => gen.classList.add("done"), 900);
+  clearDraft();
   $("changes").innerHTML = "";
   TYPES[A.type].whyWorks.forEach(w => $("changes").appendChild(el("li",null,w)));
   $("whyBox").classList.remove("hidden");
@@ -796,13 +800,52 @@ document.addEventListener("click", e => {
 });
 
 /* ===== חיבור כפתורים ===== */
-function startWizard(){ resetState(); showView("wizard"); $("stage").innerHTML = ""; renderStep(1); }
-$("startBtn").addEventListener("click", startWizard);
+/* ===== הגנה על מה שכתבת: שמירה אוטומטית של הטיוטה ===== */
+const DRAFT_KEY = "promptsai-draft-v1";
+function saveDraft(){
+  if (!A || !A.type) return;
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ A, idx, t:Date.now() })); } catch(e){}
+}
+function loadDraft(){
+  try { const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); return d && d.A && d.A.type ? d : null; } catch(e){ return null; }
+}
+function clearDraft(){ try { localStorage.removeItem(DRAFT_KEY); } catch(e){} }
+function hasText(a){ return !!(a && (a.task || a.styleNote || a.keep || a.problemNote || a.forNote || a.toneNote)); }
+// כל אות שנכתבת נשמרת מיד
+document.addEventListener("input", e => {
+  if (e.target.id === "field" && steps[idx]){ A[e.target.dataset.key || steps[idx].key] = e.target.value; saveDraft(); }
+});
+// כל בחירה נשמרת
+$("wizard").addEventListener("click", () => setTimeout(saveDraft, 0));
+// אזהרה אם סוגרים את הדף באמצע
+addEventListener("beforeunload", e => { if (!$("wizard").classList.contains("hidden") && hasText(A)){ e.preventDefault(); e.returnValue = ""; } });
+
+function updateHome(){
+  const d = loadDraft();
+  $("startBtn").textContent = d ? "המשך מאיפה שעצרתי" : "התחל";
+  $("freshBtn").classList.toggle("hidden", !d);
+  $("freshBtn").classList.remove("warn"); $("freshBtn").textContent = "התחל שאלון חדש";
+  $("homeMeta").textContent = d ? "השאלון שהתחלת שמור, כולל כל מה שכתבת" : "לוקח בערך דקה";
+}
+function startWizard(){ clearDraft(); resetState(); showView("wizard"); $("stage").innerHTML = ""; renderStep(1); }
+function resumeWizard(d){
+  resetState(); Object.assign(A, d.A); steps = buildSteps();
+  idx = Math.min(d.idx || 0, steps.length - 1);
+  showView("wizard"); $("stage").innerHTML = ""; renderStep(1);
+}
+$("startBtn").addEventListener("click", () => { const d = loadDraft(); d ? resumeWizard(d) : startWizard(); });
+// התחלה מחדש דורשת לחיצה שנייה, כדי שלא יימחק טקסט בטעות
+$("freshBtn").addEventListener("click", () => {
+  const b = $("freshBtn"), d = loadDraft();
+  if (d && hasText(d.A) && !b.classList.contains("warn")){ b.classList.add("warn"); b.textContent = "בטוח? מה שכתבת יימחק. לחץ שוב לאישור"; setTimeout(updateHome, 4000); return; }
+  startWizard();
+});
 $("restart").addEventListener("click", startWizard);
+updateHome();
 $("nextBtn").addEventListener("click", next);
 $("skipBtn").addEventListener("click", () => { const s = steps[idx], f = $("field"); if (f) f.value = ""; if (s.kind === "style"){ A.style = ""; A.styleNote = ""; } else if (s.kind === "q"){ A[s.key] = ""; A[s.key+"Note"] = ""; } next(); });
 $("backBtn").addEventListener("click", () => { saveCurrent(); if (idx > 0){ idx--; renderStep(-1); } });
-$("exitBtn").addEventListener("click", () => { theme(HOME_COLORS); showView("home"); });
+$("exitBtn").addEventListener("click", () => { saveCurrent(); saveDraft(); theme(HOME_COLORS); updateHome(); showView("home"); });
 $("again").addEventListener("click", () => { showView("wizard"); $("stage").innerHTML = ""; idx = 1; renderStep(-1); });
 $("copy").addEventListener("click", async () => {
   const t = $("result").textContent;
