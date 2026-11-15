@@ -457,7 +457,7 @@ function theme(){ root.style.setProperty("--c1",HOME_COLORS[0]); root.style.setP
 /* ===== מצב השאלון ===== */
 let steps = [], idx = 0, A = {};
 function resetState(){
-  A = { type:null, kind:null, task:"", style:"", target:"Claude", lang:"עברית", en:{} };
+  A = { type:null, kind:null, task:"", style:"", target:"Claude", lang:"עברית", en:{}, saved:{} };
   steps = buildSteps(); idx = 0;
 }
 function buildSteps(){
@@ -563,7 +563,7 @@ function renderStep(dir = 1){
     if (s.kind === "type"){
       pane.append(el("h2","q-title","מה אתה רוצה לעשות?"), el("p","q-hint","בחר מה מתאים לך, ונבנה יחד את הפרומפט."));
       pane.appendChild(cardGrid(Object.entries(TYPES).map(([k,t]) => ({ key:k, label:t.label, desc:t.desc, mini:t.mini, c:t.c[0], icon:ICONS[k] })), A.type, k => {
-        if (A.type !== k){ A.type = k; A.kind = null; A.style = ""; if (k !== "create" && A.target === IMG) A.target = "Claude"; }
+        if (A.type !== k){ A.type = k; A.kind = null; if (k !== "create" && A.target === IMG) A.target = "Claude"; loadCombo(); }
         steps = buildSteps(); theme(TYPES[k].c);
         setTimeout(() => { idx++; renderStep(1); }, 380);
       }, true));
@@ -572,7 +572,7 @@ function renderStep(dir = 1){
     else if (s.kind === "kind"){
       pane.append(el("span","tag","מה יוצרים"), el("h2","q-title","מה אתה רוצה ליצור?"), el("p","q-hint","לכל סוג נתאים שאלות וסגנונות משלו."));
       pane.appendChild(cardGrid(Object.entries(KINDS).map(([k,v]) => ({ key:k, label:v.he, c:KIND_COLORS[k], icon:KIND_ICONS[k] })), A.kind, k => {
-        if (A.kind !== k){ A.kind = k; A.style = ""; A.en.style = null; }
+        if (A.kind !== k){ A.kind = k; A.en.style = null; loadCombo(); }
         if (k === "image"){ A.target = IMG; A.lang = "אנגלית"; } else if (A.target === IMG){ A.target = "Claude"; A.lang = "עברית"; }
         setTimeout(() => { idx++; renderStep(1); }, 380);
       }));
@@ -631,6 +631,19 @@ function renderStep(dir = 1){
 function saveCurrent(){
   const s = steps[idx], f = $("field");
   if (f) A[f.dataset.key || s.key] = f.value.trim();
+  storeCombo();
+}
+/* הטקסט נשמר בנפרד לכל בקשה: אתר, קוד, פוסט, שיפור וכו'.
+   חוזרים לאותה בקשה, הטקסט חוזר. עוברים לבקשה אחרת, מתחילים נקי. */
+function comboKey(){ return A.type === "create" ? "create:" + (A.kind || "") : (A.type || ""); }
+function storeCombo(){
+  if (!A.type || (A.type === "create" && !A.kind)) return;
+  A.saved = A.saved || {};
+  A.saved[comboKey()] = { task:A.task || "", style:A.style || "", styleNote:A.styleNote || "" };
+}
+function loadCombo(){
+  const d = (A.saved || {})[comboKey()] || {};
+  A.task = d.task || ""; A.style = d.style || ""; A.styleNote = d.styleNote || "";
 }
 /* תיבת פירוט שנפתחת רק אחרי שבוחרים אפשרות. מה שנבחר לא נכתב בתוכה */
 function noteBox(key, label, placeholder, picked){
@@ -810,13 +823,13 @@ function loadDraft(){
   try { const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); return d && d.A && d.A.type ? d : null; } catch(e){ return null; }
 }
 function clearDraft(){ try { localStorage.removeItem(DRAFT_KEY); } catch(e){} }
-function hasText(a){ return !!(a && (a.task || a.styleNote || a.keep || a.problemNote || a.forNote || a.toneNote)); }
+function hasText(a){ return !!(a && (a.task || a.styleNote || a.keep || a.problemNote || a.forNote || a.toneNote || Object.values(a.saved || {}).some(x => x.task || x.styleNote))); }
 // כל אות שנכתבת נשמרת מיד
 document.addEventListener("input", e => {
-  if (e.target.id === "field" && steps[idx]){ A[e.target.dataset.key || steps[idx].key] = e.target.value; saveDraft(); }
+  if (e.target.id === "field" && steps[idx]){ A[e.target.dataset.key || steps[idx].key] = e.target.value; storeCombo(); saveDraft(); }
 });
 // כל בחירה נשמרת
-$("wizard").addEventListener("click", () => setTimeout(saveDraft, 0));
+$("wizard").addEventListener("click", () => setTimeout(() => { storeCombo(); saveDraft(); }, 0));
 // אזהרה אם סוגרים את הדף באמצע
 addEventListener("beforeunload", e => { if (!$("wizard").classList.contains("hidden") && hasText(A)){ e.preventDefault(); e.returnValue = ""; } });
 
